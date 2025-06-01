@@ -8,8 +8,20 @@ import pytz
 from io import BytesIO
 import math
 
+import openmeteo_requests
+
+import pandas as pd
+import requests_cache
+from retry_requests import retry
+
+# Setup the Open-Meteo API client with cache and retry on error                                                         #Evtl. muss das wo anders hin
+cache_session = requests_cache.CachedSession('.cache', expire_after = 3600)
+retry_session = retry(cache_session, retries = 5, backoff_factor = 0.2)
+openmeteo = openmeteo_requests.Client(session = retry_session)
+
 logger = logging.getLogger(__name__)
 
+# Evtl. bis auf Metric entfernen, wenns keine Probleme macht
 UNITS = {
     "standard": {
         "temperature": "K",
@@ -26,15 +38,18 @@ UNITS = {
     }
 }
 
+#Nicht mehr notwendig
+'''
 WEATHER_URL = "https://api.openweathermap.org/data/3.0/onecall?lat={lat}&lon={long}&units={units}&exclude=minutely&appid={api_key}"
 AIR_QUALITY_URL = "http://api.openweathermap.org/data/2.5/air_pollution?lat={lat}&lon={long}&appid={api_key}"
 GEOCODING_URL = "http://api.openweathermap.org/geo/1.0/reverse?lat={lat}&lon={long}&limit=1&appid={api_key}"
+'''
 
 class Weather(BasePlugin):
     def generate_settings_template(self):
         template_params = super().generate_settings_template()
         template_params['api_key'] = {
-            "required": True,
+            "required": False,                                                                                          #Changed to False weil nicht notwendig, falls Probleme zurückändern
             "service": "OpenWeatherMap",
             "expected_key": "OPEN_WEATHER_MAP_SECRET"
         }
@@ -43,9 +58,9 @@ class Weather(BasePlugin):
         return template_params
 
     def generate_image(self, settings, device_config):
-        api_key = device_config.load_env_key("OPEN_WEATHER_MAP_SECRET")
+        '''api_key = device_config.load_env_key("OPEN_WEATHER_MAP_SECRET")
         if not api_key:
-            raise RuntimeError("Open Weather Map API Key not configured.")
+            raise RuntimeError("Open Weather Map API Key not configured.")'''                                                                                                       #API-Key nicht mehr notwendig, bei Problemen wieder einblenden
 
         lat = settings.get('latitude')
         long = settings.get('longitude')
@@ -57,20 +72,24 @@ class Weather(BasePlugin):
             raise RuntimeError("Units are required.")
 
         try:
-            weather_data = self.get_weather_data(api_key, units, lat, long)
+            dwd_data = self.get_DWD_data(lat, long)
+            rest_data = self.get_rest_data(lat, long)
+            aqi_data = self.get_aqi_data(lat, long)
+            #Nicht mehr notwendig
+            '''weather_data = self.get_weather_data(api_key, units, lat, long)
             aqi_data = self.get_air_quality(api_key, lat, long)
-            location_data = self.get_location(api_key, lat, long)
+            location_data = self.get_location(api_key, lat, long)'''
         except Exception as e:
-            logger.error(f"Failed to make OpenWeatherMap request: {str(e)}")
-            raise RuntimeError("OpenWeatherMap request failure, please check logs.")
+            logger.error(f"Failed to make Weather data request: {str(e)}")
+            raise RuntimeError("Weather data request failure, please check logs.")
 
         dimensions = device_config.get_resolution()
         if device_config.get_config("orientation") == "vertical":
             dimensions = dimensions[::-1]
 
-        timezone = device_config.get_config("timezone", default="America/New_York")
-        tz = pytz.timezone(timezone)
-        template_params = self.parse_weather_data(weather_data, aqi_data, location_data, tz, units)
+        #timezone = device_config.get_config("timezone", default="America/New_York")                                    #Erfordert umschreiben von tz in parse_weather_data
+        #tz = pytz.timezone(timezone)
+        template_params = self.parse_weather_data(dwd_data, aqi_data, rest_data, units)
 
         template_params["plugin_settings"] = settings
 
@@ -80,7 +99,8 @@ class Weather(BasePlugin):
             raise RuntimeError("Failed to take screenshot, please check logs.")
         return image
 
-    def parse_weather_data(self, weather_data, aqi_data, location_data, tz, units):
+#Parse weather data is what the panda thing does in the new api
+    def parse_weather_data(self, weather_data, aqi_data, location_data, units):
         current = weather_data.get("current")
         dt = datetime.fromtimestamp(current.get('dt'), tz=timezone.utc).astimezone(tz)
         current_icon = current.get("weather")[0].get("icon").replace("n", "d")
@@ -98,6 +118,7 @@ class Weather(BasePlugin):
         data['data_points'] = self.parse_data_points(weather_data, aqi_data, tz, units)
 
         data['hourly_forecast'] = self.parse_hourly(weather_data.get('hourly'), tz)
+        print(data.json())
         return data
 
     def parse_forecast(self, daily_forecast, tz):
@@ -249,6 +270,48 @@ class Weather(BasePlugin):
 
         return data_points
 
+
+    def get_DWD_data(self, lat, long):
+        url = "https://api.open-meteo.com/v1/forecast"
+        params = {
+            "latitude": lat,
+            "longitude": long,
+            "daily": ["weather_code", "temperature_2m_max", "temperature_2m_min", "sunrise", "sunset",
+                      "wind_speed_10m_max"],
+            "hourly": "temperature_2m",
+            "models": "icon_seamless",
+            "current": ["temperature_2m", "relative_humidity_2m", "apparent_temperature", "pressure_msl",
+                        "weather_code"],
+            "timezone": "auto"
+        }
+        return responses = openmeteo.weather_api(url, params=params)
+
+    def get_rest_data(self, lat, long):
+        url = "https://api.open-meteo.com/v1/forecast"
+        params = {
+            "latitude": lat,
+            "longitude": long,
+            "daily": ["uv_index_max", "visibility_max"],
+            "hourly": "precipitation_probability",
+            "timezone": "auto",
+            "forecast_days": 3
+        }
+        return responses = openmeteo.weather_api(url, params=params)
+
+    def get_AQI_data(self, lat, long):
+        url = "https://air-quality-api.open-meteo.com/v1/air-quality"
+        params = {
+            "latitude": lat,
+            "longitude": long,
+            "current": "european_aqi",
+            "timezone": "auto",
+            "forecast_days": 1
+        }
+        return responses = openmeteo.weather_api(url, params=params)
+
+
+# Alte Wetter-API Abfragen
+'''  
     def get_weather_data(self, api_key, units, lat, long):
         url = WEATHER_URL.format(lat=lat, long=long, units=units, api_key=api_key)
         response = requests.get(url)
@@ -277,3 +340,4 @@ class Weather(BasePlugin):
             raise RuntimeError("Failed to retrieve location.")
 
         return response.json()[0]
+'''
