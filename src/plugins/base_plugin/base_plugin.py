@@ -1,7 +1,7 @@
 import logging
 import os
-from src.utils.app_utils import resolve_path, get_fonts
-from src.utils.image_utils import take_screenshot_html
+from utils.app_utils import resolve_path, get_fonts
+from utils.image_utils import take_screenshot_html
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from pathlib import Path
 import asyncio
