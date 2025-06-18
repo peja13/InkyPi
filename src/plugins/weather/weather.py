@@ -3,7 +3,7 @@ from PIL import Image
 import os
 import requests
 import logging
-from datetime import datetime, timezone
+import datetime
 import pytz
 from io import BytesIO
 import math
@@ -29,7 +29,7 @@ UNITS = {
     },
     "metric": {
         "temperature": "°C",
-        "speed": "m/s"
+        "speed": "km/h"
 
     },
     "imperial": {
@@ -37,6 +37,11 @@ UNITS = {
         "speed": "mph"
     }
 }
+
+wochentage = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"]
+wochentage_kurz = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
+monate = ["Januar", "Februar", "März", "April", "Mai", "Juni",
+          "Juli", "August", "September", "Oktober", "November", "Dezember"]
 
 #Nicht mehr notwendig
 '''
@@ -50,7 +55,7 @@ class Weather(BasePlugin):
         template_params = super().generate_settings_template()
         template_params['api_key'] = {
             "required": False,                                                                                          #Changed to False weil nicht notwendig, falls Probleme zurückändern
-            "service": "OpenWeatherMap",
+            "service": "OpenMeteo",
             "expected_key": "OPEN_WEATHER_MAP_SECRET"
         }
         template_params['style_settings'] = True
@@ -72,8 +77,8 @@ class Weather(BasePlugin):
             raise RuntimeError("Units are required.")
 
         try:
-            dwd_data = self.get_DWD_data(lat, long)
-            rest_data = self.get_rest_data(lat, long)
+            dwd_data, hourly_dwd_data, daily_dwd_data = self.get_DWD_data(lat, long)
+            rest_data, hourly_rest_data, daily_rest_data = self.get_rest_data(lat, long)
             aqi_data = self.get_aqi_data(lat, long)
             #Nicht mehr notwendig
             '''weather_data = self.get_weather_data(api_key, units, lat, long)
@@ -89,7 +94,8 @@ class Weather(BasePlugin):
 
         #timezone = device_config.get_config("timezone", default="America/New_York")                                    #Erfordert umschreiben von tz in parse_weather_data
         #tz = pytz.timezone(timezone)
-        template_params = self.parse_weather_data(dwd_data, aqi_data, rest_data, units)
+        # Template Params ist die Variable, die so wie im Beispiel aussehen muss, also muss data in parse Weather data angepasst werden bzw. parse weather data umgeschrieben werden
+        template_params = self.parse_weather_data(dwd_data, hourly_dwd_data, daily_dwd_data, rest_data, hourly_rest_data, daily_rest_data, aqi_data, units)
 
         template_params["plugin_settings"] = settings
 
@@ -99,159 +105,90 @@ class Weather(BasePlugin):
             raise RuntimeError("Failed to take screenshot, please check logs.")
         return image
 
-#Parse weather data is what the panda thing does in the new api
-    def parse_weather_data(self, weather_data, aqi_data, location_data, units):
-        current = weather_data.get("current")
-        dt = datetime.fromtimestamp(current.get('dt'), tz=timezone.utc).astimezone(tz)
-        current_icon = current.get("weather")[0].get("icon").replace("n", "d")
-        location_str = f"{location_data.get('name')}, {location_data.get('state', location_data.get('country'))}"
+
+    def parse_weather_data(self, dwd_weather_data, hourly_dwd_data, daily_dwd_data, rest_data, hourly_rest_data, daily_rest_data, aqi_data, units):
+        dt = datetime.datetime.fromtimestamp(dwd_weather_data["Current Time"])
+        wochentag = wochentage[dt.weekday()]        # .weekday() gibt 0 (Montag) bis 6 (Sonntag)
+        monat = monate[dt.month - 1]                # Monate sind 1-basiert
+        current_icon = dwd_weather_data["Current weather code"]
         data = {
-            "current_date": dt.strftime("%A, %B %d"),
-            "location": location_str,
+            "current_date": f"{wochentag}, {dt.day}. {monat}",
+            "location": "Affaltrach", #location_str,
             "current_day_icon": self.get_plugin_dir(f'icons/{current_icon}.png'),
-            "current_temperature": str(round(current.get("temp"))),
-            "feels_like": str(round(current.get("feels_like"))),
+            "current_temperature": str(round(dwd_weather_data["Current Temp"], 1)),
+            "feels_like": str(round(dwd_weather_data["Current app Temp"], 1)),
             "temperature_unit": UNITS[units]["temperature"],
             "units": units
         }
-        data['forecast'] = self.parse_forecast(weather_data.get('daily'), tz)
-        data['data_points'] = self.parse_data_points(weather_data, aqi_data, tz, units)
-
-        data['hourly_forecast'] = self.parse_hourly(weather_data.get('hourly'), tz)
-        print(data.json())
-        return data
-
-    def parse_forecast(self, daily_forecast, tz):
-        """
-        - daily_forecast: list of daily entries from One‑Call v3 (each has 'dt', 'weather', 'temp', 'moon_phase')
-        - tz: your target tzinfo (e.g. from zoneinfo or pytz)
-        """
-        PHASES = [
-            (0.0, "newmoon"),
-            (0.25, "firstquarter"),
-            (0.5, "fullmoon"),
-            (0.75, "lastquarter"),
-            (1.0, "newmoon"),  # API treats 1.0 same as 0.0
-        ]
-
-        def choose_phase_name(phase: float) -> str:
-            # exact matches
-            for target, name in PHASES:
-                if math.isclose(phase, target, abs_tol=1e-3):
-                    return name
-
-            # intermediate phases
-            if 0.0 < phase < 0.25:
-                return "waxingcrescent"
-            elif 0.25 < phase < 0.5:
-                return "waxinggibbous"
-            elif 0.5 < phase < 0.75:
-                return "waninggibbous"
-            else:  # 0.75 < phase < 1.0
-                return "waningcrescent"
 
         forecast = []
-        # skip today (i=0)
-        for day in daily_forecast[1:]:
-            # --- weather icon ---
-            weather_icon = day["weather"][0]["icon"]  # e.g. "10d", "01n"
-            # always show day‑style icon
-            weather_icon = weather_icon.replace("n", "d")
+        for i in range(7):
+            zeitstempel = daily_dwd_data.iloc[i,0]
+            day_name = wochentage_kurz[zeitstempel.weekday()]
+            #daily_temp_max = daily_dwd_data.iloc[i,2]
+            #daily_temp_min = daily_dwd_data.iloc[i,3]
+            weather_icon = daily_dwd_data.iloc[i,1]
             weather_icon_path = self.get_plugin_dir(f"icons/{weather_icon}.png")
-
-            # --- moon phase & icon ---
-            moon_phase = float(day["moon_phase"])  # [0.0–1.0]
-            phase_name = choose_phase_name(moon_phase)
-            moon_icon_path = self.get_plugin_dir(f"icons/{phase_name}.png")
-            # --- true illumination percent, no decimals ---
-            illum_fraction = (1 - math.cos(2 * math.pi * moon_phase)) / 2
-            moon_pct = f"{illum_fraction * 100:.0f}"
-
-            # --- date & temps ---
-            dt = datetime.fromtimestamp(day["dt"], tz=timezone.utc).astimezone(tz)
-            day_label = dt.strftime("%a")
 
             forecast.append(
                 {
-                    "day": day_label,
-                    "high": int(day["temp"]["max"]),
-                    "low": int(day["temp"]["min"]),
+                    "day": day_name,
+                    "high": int(daily_dwd_data.iloc[i,2]),
+                    "low": int(daily_dwd_data.iloc[i,3]),
                     "icon": weather_icon_path,
-                    "moon_phase_pct": moon_pct,
-                    "moon_phase_icon": moon_icon_path,
+                    "moon_phase_pct": "50",
+                    "moon_phase_icon": "/usr/local/inkypi/src/plugins/weather/icons/firstquarter.png",
                 }
             )
+        data['forecast'] = forecast                                                                                     #daily forecast
 
-        return forecast
-
-    def parse_hourly(self, hourly_forecast, tz):
-        hourly = []
-        for hour in hourly_forecast[:24]:
-            dt = datetime.fromtimestamp(hour.get('dt'), tz=timezone.utc).astimezone(tz)
-            hour_forecast = {
-                "time": dt.strftime("%-I %p"),
-                "temperature": int(hour.get("temp")),
-                "precipitiation": hour.get("pop")
-            }
-            hourly.append(hour_forecast)
-        return hourly
-
-    def parse_data_points(self, weather, air_quality, tz, units):
         data_points = []
-        sunrise_epoch = weather.get('current', {}).get("sunrise")
 
-        if sunrise_epoch:
-            sunrise_dt = datetime.fromtimestamp(sunrise_epoch, tz=timezone.utc).astimezone(tz)
-            data_points.append({
-                "label": "Sunrise",
-                "measurement": sunrise_dt.strftime('%I:%M').lstrip("0"),
-                "unit": sunrise_dt.strftime('%p'),
-                "icon": self.get_plugin_dir('icons/sunrise.png')
-            })
-        else:
-            logging.error(f"Sunrise not found in OpenWeatherMap response, this is expected for polar areas in midnight sun and polar night periods.")
+        sunrise_dt = datetime.datetime.fromtimestamp(daily_dwd_data.iloc[0,4])
+        data_points.append({
+            "label": "Sunrise",
+            "measurement": sunrise_dt.strftime('%I:%M').lstrip("0"),
+            "unit": sunrise_dt.strftime('%p'),
+            "icon": self.get_plugin_dir('icons/sunrise.png')
+        })
 
-        sunset_epoch = weather.get('current', {}).get("sunset")
-        if sunset_epoch:
-            sunset_dt = datetime.fromtimestamp(sunset_epoch, tz=timezone.utc).astimezone(tz)
-            data_points.append({
-                "label": "Sunset",
-                "measurement": sunset_dt.strftime('%I:%M').lstrip("0"),
-                "unit": sunset_dt.strftime('%p'),
-                "icon": self.get_plugin_dir('icons/sunset.png')
-            })
-        else:
-            logging.error(f"Sunset not found in OpenWeatherMap response, this is expected for polar areas in midnight sun and polar night periods.")
+        sunset_dt = datetime.datetime.fromtimestamp(daily_dwd_data.iloc[0,5])
+        data_points.append({
+            "label": "Sunset",
+            "measurement": sunset_dt.strftime('%I:%M').lstrip("0"),
+            "unit": sunset_dt.strftime('%p'),
+            "icon": self.get_plugin_dir('icons/sunset.png')
+        })
 
         data_points.append({
             "label": "Wind",
-            "measurement": weather.get('current', {}).get("wind_speed"),
+            "measurement": round(daily_dwd_data.iloc[0,6], 2),
             "unit": UNITS[units]["speed"],
             "icon": self.get_plugin_dir('icons/wind.png')
         })
 
         data_points.append({
             "label": "Humidity",
-            "measurement": weather.get('current', {}).get("humidity"),
+            "measurement": round(dwd_weather_data["Current rel Humidity"]),
             "unit": '%',
             "icon": self.get_plugin_dir('icons/humidity.png')
         })
 
         data_points.append({
             "label": "Pressure",
-            "measurement": weather.get('current', {}).get("pressure"),
+            "measurement": round(dwd_weather_data["Current rel Humidity"]),
             "unit": 'hPa',
             "icon": self.get_plugin_dir('icons/pressure.png')
         })
 
         data_points.append({
             "label": "UV Index",
-            "measurement": weather.get('current', {}).get("uvi"),
+            "measurement": round(daily_rest_data.iloc[0,2]),
             "unit": '',
             "icon": self.get_plugin_dir('icons/uvi.png')
         })
 
-        visibility = weather.get('current', {}).get("visibility")/1000
+        visibility = daily_rest_data.iloc[0,1] / 1000
         visibility_str = f">{visibility}" if visibility >= 10 else visibility
         data_points.append({
             "label": "Visibility",
@@ -260,15 +197,33 @@ class Weather(BasePlugin):
             "icon": self.get_plugin_dir('icons/visibility.png')
         })
 
-        aqi = air_quality.get('list', [])[0].get("main", {}).get("aqi")
+        aqi = round(aqi_data["Current_AQI"])
+        aqi = math.ceil(aqi/20)
         data_points.append({
             "label": "Air Quality",
             "measurement": aqi,
-            "unit": ["Good", "Fair", "Moderate", "Poor", "Very Poor"][int(aqi)-1],
+            "unit": ["Sehr Gut", "Gut", "Mittelmäßig", "Schlecht", "Sehr Schlecht", "Extrem Schlecht", "Extrem Schlecht", "Extrem Schlecht"][int(aqi) - 1],
             "icon": self.get_plugin_dir('icons/aqi.png')
         })
 
-        return data_points
+        data['data_points'] = data_points                                                                               #current forecast
+
+        hourly = []
+        dt_hour_offset = datetime.datetime.fromtimestamp(dwd_weather_data["Current Time"])
+        dt_hour_offset_int = int(f"{dt_hour_offset:%H}")
+        for i in range(24):
+            zeitstempel = hourly_dwd_data.iloc[i+dt_hour_offset_int, 0]
+            dt = zeitstempel.hour()
+            hour_forecast = {
+                "time": "dt",
+                "temperature": int(hourly_dwd_data.iloc[i+dt_hour_offset_int, 1]),
+                "precipitiation": (hourly_rest_data.iloc[i+dt_hour_offset_int, 1])/100,
+            }
+            hourly.append(hour_forecast)
+
+        data['hourly_forecast'] = hourly                                                                                #hourly forecast
+        print(data.json())
+        return data
 
 
     def get_DWD_data(self, lat, long):
@@ -284,7 +239,58 @@ class Weather(BasePlugin):
                         "weather_code"],
             "timezone": "auto"
         }
-        return responses = openmeteo.weather_api(url, params=params)
+        responses = openmeteo.weather_api(url, params=params)
+        response = {responses[0]}
+        current = response.Current()
+        hourly = response.Hourly()
+        hourly_temperature_2m = hourly.Variables(0).ValuesAsNumpy()
+
+        hourly_data = {"date": pd.date_range(
+            start=pd.to_datetime(hourly.Time()+response.UtcOffsetSeconds(), unit="s", utc=True),
+            end=pd.to_datetime(hourly.TimeEnd()+response.UtcOffsetSeconds(), unit="s", utc=True),
+            freq=pd.Timedelta(seconds=hourly.Interval()),
+            inclusive="left"
+        )}
+        hourly_data["temperature_2m"] = hourly_temperature_2m
+        hourly_dataframe = pd.DataFrame(data=hourly_data)
+
+        daily = response.Daily()
+        daily_weather_code = daily.Variables(0).ValuesAsNumpy()
+        daily_temperature_2m_max = daily.Variables(1).ValuesAsNumpy()
+        daily_temperature_2m_min = daily.Variables(2).ValuesAsNumpy()
+        daily_sunrise = daily.Variables(3).ValuesInt64AsNumpy()
+        daily_sunset = daily.Variables(4).ValuesInt64AsNumpy()
+        daily_wind_speed_10m_max = daily.Variables(5).ValuesAsNumpy()
+        daily_data = {"date": pd.date_range(
+            start=pd.to_datetime(daily.Time()+response.UtcOffsetSeconds(), unit="s", utc=True),
+            end=pd.to_datetime(daily.TimeEnd()+response.UtcOffsetSeconds(), unit="s", utc=True),
+            freq=pd.Timedelta(seconds=daily.Interval()),
+            inclusive="left"
+        )}
+        daily_data["weather_code"] = daily_weather_code
+        daily_data["temperature_2m_max"] = daily_temperature_2m_max
+        daily_data["temperature_2m_min"] = daily_temperature_2m_min
+        daily_data["sunrise"] = daily_sunrise
+        daily_data["sunset"] = daily_sunset
+        daily_data["wind_speed_10m_max"] = daily_wind_speed_10m_max
+        daily_dataframe = pd.DataFrame(data=daily_data)
+
+        dwd_data = {
+            "Coordinates" : [response.Latitude(), response.Longitude()],
+            "Elevation" : response.Elevation(),
+            "Timezone" : response.Timezone(),
+            "Timezone_offset" : response.UtcOffsetSeconds(),
+
+            "Current Time" : current.Time(),
+            "Current Temp" : current.Variables(0).Value(),
+            "Current rel Humidity" : current.Variables(1).Value(),
+            "Current app Temp" : current.Variables(2).Value(),
+            "Current pressure msl" : current.Variables(3).Value(),
+            "Current weather code" : current.Variables(4).Value(),
+
+
+        }
+        return dwd_data, hourly_dataframe, daily_dataframe
 
     def get_rest_data(self, lat, long):
         url = "https://api.open-meteo.com/v1/forecast"
@@ -294,9 +300,42 @@ class Weather(BasePlugin):
             "daily": ["uv_index_max", "visibility_max"],
             "hourly": "precipitation_probability",
             "timezone": "auto",
-            "forecast_days": 3
+            "forecast_days": 2
         }
-        return responses = openmeteo.weather_api(url, params=params)
+        responses = openmeteo.weather_api(url, params=params)
+        response = responses[0]
+        rest_data = {
+            "Coordinates": [response.Latitude(), response.Longitude()],
+            "Elevation": response.Elevation(),
+            "Timezone": response.Timezone(),
+            "Timezone_offset": response.UtcOffsetSeconds(),
+        }
+
+        hourly = response.Hourly()
+        hourly_precipitation_probability = hourly.Variables(0).ValuesAsNumpy()
+        hourly_data = {"date": pd.date_range(
+            start=pd.to_datetime(hourly.Time()+response.UtcOffsetSeconds(), unit="s", utc=True),
+            end=pd.to_datetime(hourly.TimeEnd()+response.UtcOffsetSeconds(), unit="s", utc=True),
+            freq=pd.Timedelta(seconds=hourly.Interval()),
+            inclusive="left"
+        )}
+        hourly_data["precipitation_probability"] = hourly_precipitation_probability
+        hourly_dataframe = pd.DataFrame(data=hourly_data)
+
+        daily = response.Daily()
+        daily_uv_index_max = daily.Variables(0).ValuesAsNumpy()
+        daily_visibility_max = daily.Variables(1).ValuesAsNumpy()
+        daily_data = {"date": pd.date_range(
+            start=pd.to_datetime(daily.Time()+response.UtcOffsetSeconds(), unit="s", utc=True),
+            end=pd.to_datetime(daily.TimeEnd()+response.UtcOffsetSeconds(), unit="s", utc=True),
+            freq=pd.Timedelta(seconds=daily.Interval()),
+            inclusive="left"
+        )}
+        daily_data["uv_index_max"] = daily_uv_index_max
+        daily_data["visibility_max"] = daily_visibility_max
+        daily_dataframe = pd.DataFrame(data=daily_data)
+
+        return rest_data, hourly_dataframe, daily_dataframe
 
     def get_AQI_data(self, lat, long):
         url = "https://air-quality-api.open-meteo.com/v1/air-quality"
@@ -307,7 +346,18 @@ class Weather(BasePlugin):
             "timezone": "auto",
             "forecast_days": 1
         }
-        return responses = openmeteo.weather_api(url, params=params)
+        responses = openmeteo.weather_api(url, params=params)
+        response = responses[0]
+        current = response.Current()
+        #current_european_aqi = current.Variables(0).Value()
+        aqi_data = {
+            "Coordinates": [response.Latitude(), response.Longitude()],
+            "Elevation": response.Elevation(),
+            "Timezone": response.Timezone(),
+            "Timezone_offset": response.UtcOffsetSeconds(),
+            "Current_AQI":  current.Variables(0).Value(),
+        }
+        return aqi_data
 
 
 # Alte Wetter-API Abfragen
