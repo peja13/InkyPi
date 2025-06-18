@@ -1,0 +1,46 @@
+Which API does what:
+DWD:
+    daily:
+        Weather code
+        Max Temp
+        Min Temp
+        Sunrise (0/7) (current)
+        Sunset (0/7)  (current)
+        Max Wind Speed (0/7, ("Wind"))
+
+    hourly:
+        Temperature (7d*24h)
+        (erstmal ungenutzt) Precipitation (7d*24h; müsste von Precipitation chance umgemodelt werden)
+
+    current:
+        Temp
+        Apparent Temp
+        Rel. Humidity
+        Weather Code
+        Sealevel Preassure
+https://open-meteo.com/en/docs/dwd-api?timezone=Europe%2FBerlin&latitude=49.1346961173784&longitude=9.38455012521919&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,wind_speed_10m_max&current=temperature_2m,relative_humidity_2m,apparent_temperature,pressure_msl,weather_code
+
+Best_Choice (2 instead of 3 days)
+    daily:
+        max. Visibility
+        UVI max
+
+    hourly:
+        Precipitation probability
+https://open-meteo.com/en/docs?timezone=Europe%2FBerlin&latitude=49.1346961173784&longitude=9.38455012521919&forecast_days=3&daily=uv_index_max,visibility_max&hourly=precipitation_probability
+
+AQI:
+    daily:
+        AQI
+https://open-meteo.com/en/docs/air-quality-api?timezone=Europe%2FBerlin&current=european_aqi&forecast_days=1&latitude=49.1346961173784&longitude=9.38455012521919
+
+Missing:
+    daily:
+
+    hourly:
+
+    current:
+
+lerne dictionarys
+
+API-Params in die Reihenfolge der Abfrage bringen!

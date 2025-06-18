@@ -1,4 +1,4 @@
-from plugins.base_plugin.base_plugin import BasePlugin
+from src.plugins.base_plugin.base_plugin import BasePlugin
 from PIL import Image
 import os
 import requests
@@ -79,7 +79,7 @@ class Weather(BasePlugin):
         try:
             dwd_data, hourly_dwd_data, daily_dwd_data = self.get_DWD_data(lat, long)
             rest_data, hourly_rest_data, daily_rest_data = self.get_rest_data(lat, long)
-            aqi_data = self.get_aqi_data(lat, long)
+            aqi_data = self.get_AQI_data(lat, long)
             #Nicht mehr notwendig
             '''weather_data = self.get_weather_data(api_key, units, lat, long)
             aqi_data = self.get_air_quality(api_key, lat, long)
@@ -222,7 +222,7 @@ class Weather(BasePlugin):
             hourly.append(hour_forecast)
 
         data['hourly_forecast'] = hourly                                                                                #hourly forecast
-        print(data.json())
+        #print(data.json())
         return data
 
 

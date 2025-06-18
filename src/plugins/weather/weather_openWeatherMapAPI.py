@@ -85,7 +85,7 @@ class Weather(BasePlugin):
         dt = datetime.fromtimestamp(current.get('dt'), tz=timezone.utc).astimezone(tz)
         current_icon = current.get("weather")[0].get("icon").replace("n", "d")
         location_str = f"{location_data.get('name')}, {location_data.get('state', location_data.get('country'))}"
-        data = {
+        data = {USB-C [Stecker] / USB-C [Buchse]
             "current_date": dt.strftime("%A, %B %d"),
             "location": location_str,
             "current_day_icon": self.get_plugin_dir(f'icons/{current_icon}.png'),
@@ -98,6 +98,7 @@ class Weather(BasePlugin):
         data['data_points'] = self.parse_data_points(weather_data, aqi_data, tz, units)
 
         data['hourly_forecast'] = self.parse_hourly(weather_data.get('hourly'), tz)
+        print(data)
         return data
 
     def parse_forecast(self, daily_forecast, tz):
