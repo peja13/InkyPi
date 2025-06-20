@@ -188,8 +188,8 @@ class Weather(BasePlugin):
             "icon": self.get_plugin_dir('icons/uvi.png')
         })
 
-        visibility = daily_rest_data.iloc[0,2] / 1000
-        visibility_str = f">{visibility}" if visibility >= 10 else visibility
+        visibility = round(daily_rest_data.iloc[0,2] / 1000)
+        visibility_str = f"{visibility}" #if visibility >= 10 else visibility
         data_points.append({
             "label": "Visibility",
             "measurement": visibility_str,
