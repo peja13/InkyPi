@@ -147,16 +147,16 @@ class Weather(BasePlugin):
         sunrise_dt = datetime.datetime.fromtimestamp(daily_dwd_data.iloc[0,4])
         data_points.append({
             "label": "Sunrise",
-            "measurement": sunrise_dt.strftime('%I:%M').lstrip("0"),
-            "unit": sunrise_dt.strftime('%p'),
+            "measurement": sunrise_dt.strftime('%H:%M').lstrip("0"),
+            "unit": "",
             "icon": self.get_plugin_dir('icons/sunrise.png')
         })
 
         sunset_dt = datetime.datetime.fromtimestamp(daily_dwd_data.iloc[0,5])
         data_points.append({
             "label": "Sunset",
-            "measurement": sunset_dt.strftime('%I:%M').lstrip("0"),
-            "unit": sunset_dt.strftime('%p'),
+            "measurement": sunset_dt.strftime('%H:%M').lstrip("0"),
+            "unit": "",
             "icon": self.get_plugin_dir('icons/sunset.png')
         })
 
@@ -183,12 +183,12 @@ class Weather(BasePlugin):
 
         data_points.append({
             "label": "UV Index",
-            "measurement": round(daily_rest_data.iloc[0,2]),
+            "measurement": round(daily_rest_data.iloc[0,1]),
             "unit": '',
             "icon": self.get_plugin_dir('icons/uvi.png')
         })
 
-        visibility = daily_rest_data.iloc[0,1] / 1000
+        visibility = daily_rest_data.iloc[0,2] / 1000
         visibility_str = f">{visibility}" if visibility >= 10 else visibility
         data_points.append({
             "label": "Visibility",
@@ -213,9 +213,9 @@ class Weather(BasePlugin):
         dt_hour_offset_int = int(f"{dt_hour_offset:%H}")
         for i in range(24):
             zeitstempel = hourly_dwd_data.iloc[i+dt_hour_offset_int, 0]
-            dt = zeitstempel.hour()
+            dt = zeitstempel.hour
             hour_forecast = {
-                "time": dt,
+                "time": str(dt),
                 "temperature": int(hourly_dwd_data.iloc[i+dt_hour_offset_int, 1]),
                 "precipitiation": (hourly_rest_data.iloc[i+dt_hour_offset_int, 1])/100,
             }
