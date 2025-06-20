@@ -215,7 +215,7 @@ class Weather(BasePlugin):
             zeitstempel = hourly_dwd_data.iloc[i+dt_hour_offset_int, 0]
             dt = zeitstempel.hour()
             hour_forecast = {
-                "time": "dt",
+                "time": dt,
                 "temperature": int(hourly_dwd_data.iloc[i+dt_hour_offset_int, 1]),
                 "precipitiation": (hourly_rest_data.iloc[i+dt_hour_offset_int, 1])/100,
             }
