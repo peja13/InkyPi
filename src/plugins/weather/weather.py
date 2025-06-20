@@ -146,7 +146,7 @@ class Weather(BasePlugin):
 
         sunrise_dt = datetime.datetime.fromtimestamp(daily_dwd_data.iloc[0,4])
         data_points.append({
-            "label": "Sunrise",
+            "label": "Sonnenaufgang",
             "measurement": sunrise_dt.strftime('%H:%M').lstrip("0"),
             "unit": "",
             "icon": self.get_plugin_dir('icons/sunrise.png')
@@ -154,7 +154,7 @@ class Weather(BasePlugin):
 
         sunset_dt = datetime.datetime.fromtimestamp(daily_dwd_data.iloc[0,5])
         data_points.append({
-            "label": "Sunset",
+            "label": "Sonnenuntergang",
             "measurement": sunset_dt.strftime('%H:%M').lstrip("0"),
             "unit": "",
             "icon": self.get_plugin_dir('icons/sunset.png')
@@ -168,14 +168,14 @@ class Weather(BasePlugin):
         })
 
         data_points.append({
-            "label": "Humidity",
+            "label": "Luftfeutigkeit",
             "measurement": round(dwd_weather_data["Current rel Humidity"]),
             "unit": '%',
             "icon": self.get_plugin_dir('icons/humidity.png')
         })
 
         data_points.append({
-            "label": "Pressure",
+            "label": "Luftdruck",
             "measurement": round(dwd_weather_data["Current rel Humidity"]),
             "unit": 'hPa',
             "icon": self.get_plugin_dir('icons/pressure.png')
@@ -191,7 +191,7 @@ class Weather(BasePlugin):
         visibility = round(daily_rest_data.iloc[0,2] / 1000)
         visibility_str = f"{visibility}" #if visibility >= 10 else visibility
         data_points.append({
-            "label": "Visibility",
+            "label": "Sichtweite",
             "measurement": visibility_str,
             "unit": 'km',
             "icon": self.get_plugin_dir('icons/visibility.png')
@@ -200,7 +200,7 @@ class Weather(BasePlugin):
         aqi = round(aqi_data["Current_AQI"])
         aqi = math.ceil(aqi/20)
         data_points.append({
-            "label": "Air Quality",
+            "label": "Luftqualität",
             "measurement": aqi,
             "unit": ["Sehr Gut", "Gut", "Mittelmäßig", "Schlecht", "Sehr Schlecht", "Extrem Schlecht", "Extrem Schlecht", "Extrem Schlecht"][int(aqi) - 1],
             "icon": self.get_plugin_dir('icons/aqi.png')
