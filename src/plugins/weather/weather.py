@@ -240,7 +240,7 @@ class Weather(BasePlugin):
             "timezone": "auto"
         }
         responses = openmeteo.weather_api(url, params=params)
-        response = {responses[0]}
+        response = responses[0]
         current = response.Current()
         hourly = response.Hourly()
         hourly_temperature_2m = hourly.Variables(0).ValuesAsNumpy()
