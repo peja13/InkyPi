@@ -176,7 +176,7 @@ class Weather(BasePlugin):
 
         data_points.append({
             "label": "Luftdruck",
-            "measurement": round(dwd_weather_data["Current rel Humidity"]),
+            "measurement": round(dwd_weather_data["Current pressure msl"]),
             "unit": 'hPa',
             "icon": self.get_plugin_dir('icons/pressure.png')
         })
