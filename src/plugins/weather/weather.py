@@ -110,7 +110,7 @@ class Weather(BasePlugin):
         dt = datetime.datetime.fromtimestamp(dwd_weather_data["Current Time"])
         wochentag = wochentage[dt.weekday()]        # .weekday() gibt 0 (Montag) bis 6 (Sonntag)
         monat = monate[dt.month - 1]                # Monate sind 1-basiert
-        current_icon = dwd_weather_data["Current weather code"]
+        current_icon = int(dwd_weather_data["Current weather code"])
         data = {
             "current_date": f"{wochentag}, {dt.day}. {monat}",
             "location": "Affaltrach", #location_str,
@@ -128,7 +128,7 @@ class Weather(BasePlugin):
             #daily_temp_max = daily_dwd_data.iloc[i,2]
             #daily_temp_min = daily_dwd_data.iloc[i,3]
             weather_icon = daily_dwd_data.iloc[i,1]
-            weather_icon_path = self.get_plugin_dir(f"icons/{weather_icon}.png")
+            weather_icon_path = int(self.get_plugin_dir(f"icons/{weather_icon}.png"))
 
             forecast.append(
                 {
