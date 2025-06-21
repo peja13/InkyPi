@@ -127,8 +127,8 @@ class Weather(BasePlugin):
             day_name = wochentage_kurz[zeitstempel.weekday()]
             #daily_temp_max = daily_dwd_data.iloc[i,2]
             #daily_temp_min = daily_dwd_data.iloc[i,3]
-            weather_icon = daily_dwd_data.iloc[i,1]
-            weather_icon_path = int(self.get_plugin_dir(f"icons/{weather_icon}.png"))
+            weather_icon = int(daily_dwd_data.iloc[i,1])
+            weather_icon_path = self.get_plugin_dir(f"icons/{weather_icon}.png")
 
             forecast.append(
                 {
